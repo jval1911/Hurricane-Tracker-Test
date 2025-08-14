@@ -1272,9 +1272,9 @@ def index():
             /* Mobile popup sizing - makes popups much smaller on mobile devices */
             @media screen and (max-width: 768px) {
                 .leaflet-popup-content {
-                    width: 160px !important;
-                    max-width: 175px !important;
-                    font-size: 11px !important;
+                    width: 60px !important;
+                    max-width: 75px !important;
+                    font-size: 9px !important;
                 }
                 .property-popup {
                     min-width: 150px !important;
