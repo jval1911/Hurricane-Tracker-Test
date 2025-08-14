@@ -739,10 +739,7 @@ def create_hurricane_map():
                         <td style="padding: 6px 0; color: #8E8E93;"><b>Movement:</b></td>
                         <td style="padding: 6px 0; color: #000000;">{hurricane.get('movement_dir', 'Unknown')} at {hurricane.get('movement_speed', 'Unknown')} mph</td>
                     </tr>
-                    <tr style="border-bottom: 1px solid #E5E5EA;">
-                        <td style="padding: 6px 0; color: #8E8E93;"><b>AI Forecast:</b></td>
-                        <td style="padding: 6px 0; color: #8E8E93;">{hurricane.get('ai_forecast', {}).get('source', 'Processing...')}</td>
-                    </tr>
+
                     <tr>
                         <td style="padding: 6px 0; color: #8E8E93;"><b>Track Points:</b></td>
                         <td style="padding: 6px 0; color: #000000;">{len(hurricane.get('past_track', []))} historical positions</td>
@@ -1272,9 +1269,9 @@ def index():
             /* Mobile popup sizing - makes popups much smaller on mobile devices */
             @media screen and (max-width: 768px) {
                 .leaflet-popup-content {
-                    width: 60px !important;
-                    max-width: 75px !important;
-                    font-size: 9px !important;
+                    width: 160px !important;
+                    max-width: 175px !important;
+                    font-size: 11px !important;
                 }
                 .property-popup {
                     min-width: 150px !important;
