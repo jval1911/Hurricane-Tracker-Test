@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string, jsonify, request
 import folium
 from folium import plugins
 from datetime import datetime, timedelta
@@ -295,7 +295,6 @@ def get_hurricane_data_tropycal():
                     'lon': None,
                     'past_track': [],
                     'forecast_track': [],
-                    'ai_forecast': None,
                     'wind_speed': None,
                     'movement_speed': None,
                     'movement_dir': None,
@@ -435,8 +434,17 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     
     return distance
 
+def is_mobile_request():
+    """Detect if request is from mobile device"""
+    user_agent = request.headers.get('User-Agent', '').lower()
+    mobile_agents = ['android', 'iphone', 'ipad', 'mobile', 'tablet']
+    return any(agent in user_agent for agent in mobile_agents)
+
 def create_hurricane_map():
     """Create Folium map with complete historical data and enhanced property info"""
+    
+    # Check if mobile
+    is_mobile = is_mobile_request()
     
     # Create base map
     m = folium.Map(
@@ -491,6 +499,7 @@ def create_hurricane_map():
     
     # Add properties with distance calculations to hurricanes
     print(f"Adding {len(locations_data)} properties to map...")
+    print(f"Mobile device detected: {is_mobile}")
     threatened_properties = []
     
     for location in locations_data:
@@ -628,26 +637,42 @@ def create_hurricane_map():
                 TIV: {location.get('tiv', 'N/A')}
                 Hurricane Ded: {location.get('hurricane_deductible', 'N/A')}"""
                 
-                # Red icon for threatened properties
-                folium.Marker(
-                    location=[location['lat'], location['lon']],
-                    popup=folium.Popup(popup_content, max_width=350),
-                    tooltip=tooltip_text,
-                    icon=folium.Icon(color='red', icon='exclamation-triangle', prefix='fa')
-                ).add_to(threatened_property_group)
+                # Red icon for threatened properties - smaller on mobile
+                if is_mobile:
+                    # Small red circle for mobile threatened properties
+                    folium.CircleMarker(
+                        location=[location['lat'], location['lon']],
+                        radius=4,  # Very small for mobile
+                        popup=folium.Popup(popup_content, max_width=250 if is_mobile else 350),
+                        tooltip=tooltip_text,
+                        color='white',
+                        weight=1,
+                        fill=True,
+                        fillColor='#FF3B30',
+                        fillOpacity=0.9
+                    ).add_to(threatened_property_group)
+                else:
+                    # Regular icon for desktop
+                    folium.Marker(
+                        location=[location['lat'], location['lon']],
+                        popup=folium.Popup(popup_content, max_width=350),
+                        tooltip=tooltip_text,
+                        icon=folium.Icon(color='red', icon='exclamation-triangle', prefix='fa')
+                    ).add_to(threatened_property_group)
                 threatened_properties.append(location['location'])
             else:
                 # Normal tooltip
                 tooltip_text = f"<b>{location['location']}</b>"
                 
-                # Simple small circle for normal properties
+                # Small circle for normal properties - even smaller on mobile
+                marker_radius = 3 if is_mobile else 6
                 folium.CircleMarker(
                     location=[location['lat'], location['lon']],
-                    radius=6,  # Smaller radius
-                    popup=folium.Popup(popup_content, max_width=350),
+                    radius=marker_radius,
+                    popup=folium.Popup(popup_content, max_width=250 if is_mobile else 350),
                     tooltip=tooltip_text,
                     color='white',
-                    weight=2,
+                    weight=1 if is_mobile else 2,
                     fill=True,
                     fillColor='#0E7490',
                     fillOpacity=0.9
@@ -721,13 +746,17 @@ def create_hurricane_map():
             </div>
             """
             
+            # Smaller hurricane icon for mobile
+            icon_size = "10px" if is_mobile else "16px"
+            font_size = "11px" if is_mobile else "13px"
+            
             hurricane_icon = folium.features.DivIcon(
                 html=f"""
                 <div style="text-align: center;">
-                    <div style="font-size: 12px; width: 16px; height: 16px; 
+                    <div style="font-size: 12px; width: {icon_size}; height: {icon_size}; 
                          background-color: #FF3B30; border-radius: 50%; 
-                         border: 3px solid white; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.2);"></div>
-                    <div style="font-size: 13px; font-weight: 600; color: #000000; 
+                         border: 2px solid white; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.2);"></div>
+                    <div style="font-size: {font_size}; font-weight: 600; color: #000000; 
                          margin-top: 3px; text-shadow: 1px 1px 3px rgba(255,255,255,0.8), -1px -1px 3px rgba(255,255,255,0.8);
                          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
                         {hurricane['name']}
@@ -738,7 +767,7 @@ def create_hurricane_map():
             
             folium.Marker(
                 location=[hurricane['lat'], hurricane['lon']],
-                popup=folium.Popup(hurricane_html, max_width=350),
+                popup=folium.Popup(hurricane_html, max_width=250 if is_mobile else 350),
                 icon=hurricane_icon
             ).add_to(current_position_group)
             
@@ -750,7 +779,7 @@ def create_hurricane_map():
                 fill=True,
                 fillColor='#FF3B30',
                 fillOpacity=0.08,  # Very subtle fill
-                weight=1.5,
+                weight=1 if is_mobile else 1.5,
                 opacity=0.3,
                 dash_array='8,4',
                 tooltip=f"{hurricane['name']} - 300 Mile Threat Zone"
@@ -765,15 +794,18 @@ def create_hurricane_map():
                     folium.PolyLine(
                         locations=past_coords,
                         color='#8E8E93',  # iOS gray for neutral past track
-                        weight=2.5,
+                        weight=1.5 if is_mobile else 2.5,
                         opacity=0.7,
                         tooltip=f"{hurricane['name']} Complete Track ({len(past_coords)} points)"
                     ).add_to(past_track_group)
                     
                     # Add markers for ALL historical positions (every 4th point for visibility)
+                    point_interval = 6 if is_mobile else 4  # Show fewer points on mobile
+                    marker_radius = 2 if is_mobile else 3
+                    
                     for i, point in enumerate(hurricane['past_track']):
-                        # Show every 4th point, plus first and last
-                        if i % 4 == 0 or i == 0 or i == len(hurricane['past_track']) - 1:
+                        # Show fewer points on mobile
+                        if i % point_interval == 0 or i == 0 or i == len(hurricane['past_track']) - 1:
                             # Use neutral gray for historical points
                             point_color = '#8E8E93'  # iOS gray
                             
@@ -792,8 +824,8 @@ def create_hurricane_map():
                             
                             folium.CircleMarker(
                                 location=[point['lat'], point['lon']],
-                                radius=4 if i % 8 == 0 else 3,  # Larger markers every 8th point
-                                popup=folium.Popup(point_popup, max_width=250),
+                                radius=marker_radius,
+                                popup=folium.Popup(point_popup, max_width=200 if is_mobile else 250),
                                 tooltip=f"{point.get('time', '')} - {point.get('category', 'Unknown')}",
                                 color=point_color,
                                 fill=True,
@@ -819,7 +851,7 @@ def create_hurricane_map():
                     folium.PolyLine(
                         locations=cone_data['center_line'],
                         color='#8E8E93',  # iOS gray - neutral
-                        weight=2,
+                        weight=1.5 if is_mobile else 2,
                         opacity=0.6,
                         dash_array='10,5',
                         tooltip=f"AI Forecast - {cone_data['source']}"
@@ -829,7 +861,7 @@ def create_hurricane_map():
                     folium.Polygon(
                         locations=cone_data['polygon'],
                         color=cone_color,
-                        weight=1.5,
+                        weight=1 if is_mobile else 1.5,
                         fill=True,
                         fillColor=cone_color,
                         fillOpacity=0.15,  # More subtle
@@ -837,25 +869,27 @@ def create_hurricane_map():
                     ).add_to(ai_cone_group)
                     
                     # Add forecast position markers with iOS styling
-                    for point in cone_data['forecast_points'][::2]:  # Every other point
-                        # Convert nautical miles to regular miles for display
-                        error_miles = point['cone_radius_nm'] * 1.15078
-                        folium.CircleMarker(
-                            location=[point['lat'], point['lon']],
-                            radius=4,
-                            popup=f"""<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
-                                     <b style="color: #000000; font-size: 14px;">AI Forecast +{point['hours']}h</b><br>
-                                     <span style="color: #8E8E93;">Position:</span> {point['lat']:.1f}°N, {abs(point['lon']):.1f}°W<br>
-                                     <span style="color: #8E8E93;">Winds:</span> {point['wind_speed']:.0f} mph<br>
-                                     <span style="color: #8E8E93;">Time:</span> {point['time']}<br>
-                                     <span style="color: #8E8E93;">Error:</span> ±{error_miles:.0f} miles
-                                     </div>""",
-                            color='#8E8E93',  # iOS gray - neutral forecast color
-                            fill=True,
-                            fillColor='#FFFFFF',  # White fill
-                            fillOpacity=0.9,
-                            weight=1.5
-                        ).add_to(ai_forecast_group)
+                    forecast_interval = 3 if is_mobile else 2  # Show fewer points on mobile
+                    for idx, point in enumerate(cone_data['forecast_points']):
+                        if idx % forecast_interval == 0:  # Show fewer points on mobile
+                            # Convert nautical miles to regular miles for display
+                            error_miles = point['cone_radius_nm'] * 1.15078
+                            folium.CircleMarker(
+                                location=[point['lat'], point['lon']],
+                                radius=3 if is_mobile else 4,
+                                popup=f"""<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+                                         <b style="color: #000000; font-size: 14px;">AI Forecast +{point['hours']}h</b><br>
+                                         <span style="color: #8E8E93;">Position:</span> {point['lat']:.1f}°N, {abs(point['lon']):.1f}°W<br>
+                                         <span style="color: #8E8E93;">Winds:</span> {point['wind_speed']:.0f} mph<br>
+                                         <span style="color: #8E8E93;">Time:</span> {point['time']}<br>
+                                         <span style="color: #8E8E93;">Error:</span> ±{error_miles:.0f} miles
+                                         </div>""",
+                                color='#8E8E93',  # iOS gray - neutral forecast color
+                                fill=True,
+                                fillColor='#FFFFFF',  # White fill
+                                fillOpacity=0.9,
+                                weight=1 if is_mobile else 1.5
+                            ).add_to(ai_forecast_group)
     
     # Add all groups to map
     property_group.add_to(m)
@@ -869,14 +903,21 @@ def create_hurricane_map():
     # Layer control
     folium.LayerControl(collapsed=False, position='topright').add_to(m)
     
-    # Tools
-    plugins.MeasureControl(primary_length_unit='miles').add_to(m)
+    # Tools - only add measure control on desktop
+    if not is_mobile:
+        plugins.MeasureControl(primary_length_unit='miles').add_to(m)
     plugins.Fullscreen().add_to(m)
     
     # Title with iOS-style design and logo beside title
     threat_count = len(threatened_properties) if 'threatened_properties' in locals() else 0
     threat_color = '#FF3B30' if threat_count > 0 else '#34C759'  # iOS red and green
     threat_text = f'⚠️ {threat_count} Properties Under Threat' if threat_count > 0 else '✓ All Properties Safe'
+    
+    # Smaller title for mobile
+    title_padding = "8px 16px" if is_mobile else "12px 24px"
+    title_font_size = "15px" if is_mobile else "17px"
+    subtitle_font_size = "11px" if is_mobile else "13px"
+    logo_height = "30px" if is_mobile else "40px"
     
     title_html = f'''
     <div id="title" style="position: fixed; 
@@ -888,7 +929,7 @@ def create_hurricane_map():
                 height: auto; 
                 background-color: rgba(255,255,255,0.98);
                 border-radius: 16px;
-                padding: 12px 24px;
+                padding: {title_padding};
                 z-index: 9999;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05);
@@ -896,14 +937,14 @@ def create_hurricane_map():
                 -webkit-backdrop-filter: blur(10px);">
         <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
             <div style="text-align: center;">
-                <h3 style="color: #000000; margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.4px;">
+                <h3 style="color: #000000; margin: 0; font-size: {title_font_size}; font-weight: 600; letter-spacing: -0.4px;">
                     Fitch Irick Hurricane Risk Tracker
                 </h3>
-                <p style="margin: 4px 0 0 0; font-size: 13px; color: #8E8E93; font-weight: 400;">
+                <p style="margin: 4px 0 0 0; font-size: {subtitle_font_size}; color: #8E8E93; font-weight: 400;">
                     Click on Locations for More Information
                 </p>
             </div>
-            <img src="/static/logo.png" alt="Fitch Irick Logo" style="height: 40px;">
+            <img src="/static/logo.png" alt="Fitch Irick Logo" style="height: {logo_height};">
         </div>
 
     </div>
@@ -1138,6 +1179,24 @@ def index():
                 width: 100vw;
             }
             
+            /* Mobile-specific marker sizing */
+            @media screen and (max-width: 768px) {
+                /* Make all circle markers smaller on mobile */
+                .leaflet-marker-pane svg {
+                    transform: scale(0.7);
+                }
+                
+                /* Make marker icons smaller */
+                .leaflet-marker-icon {
+                    transform: scale(0.8);
+                }
+                
+                /* Smaller click/touch targets for dense areas */
+                .leaflet-clickable {
+                    cursor: pointer;
+                }
+            }
+            
             /* Landscape orientation lock for mobile */
             @media screen and (max-width: 768px) and (orientation: portrait) {
                 #rotate-message {
@@ -1347,6 +1406,7 @@ update_thread = threading.Thread(target=auto_update_loop, daemon=True)
 update_thread.start()
 
 print("\nFitch Irick Hurricane Risk Tracker Features:")
+print("- Mobile-optimized with smaller markers on mobile devices")
 print("- Complete historical hurricane track data")
 print("- Enhanced property popups with TIV and deductibles")
 print("- AI-powered hurricane path prediction")
