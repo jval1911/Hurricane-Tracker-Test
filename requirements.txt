@@ -1,0 +1,14 @@
+Flask
+requests
+pandas
+openpyxl
+Werkzeug
+xlrd
+tropycal
+setuptools
+folium
+gunicorn
+shapely==2.1.1
+cartopy==0.25.0
+openai==0.28.1
+python-dotenv==1.0.0
