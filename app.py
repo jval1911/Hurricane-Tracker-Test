@@ -520,7 +520,7 @@ def create_hurricane_map():
             
             # Build comprehensive popup with iOS-style design
             popup_content = f"""
-            <div style='font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; min-width: 250px; max-width: 350px;'>
+            <div class='property-popup' style='font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; min-width: 250px; max-width: 350px;'>
                 <h3 style='color: #000000; margin: 5px 0; border-bottom: 1px solid #E5E5EA; padding-bottom: 8px; font-size: 17px; font-weight: 600;'>
                     {location['location']}
                 </h3>
@@ -1201,6 +1201,35 @@ def index():
             #rotate-subtext {
                 font-size: 14px;
                 color: #999;
+            }
+            
+            /* Mobile popup sizing - makes popups smaller on mobile devices */
+            @media screen and (max-width: 768px) {
+                .leaflet-popup-content {
+                    width: 200px !important;
+                    max-width: 200px !important;
+                }
+                .property-popup {
+                    min-width: 180px !important;
+                    max-width: 200px !important;
+                }
+                .property-popup h3 {
+                    font-size: 14px !important;
+                    margin: 3px 0 !important;
+                    padding-bottom: 5px !important;
+                }
+                .property-popup table {
+                    font-size: 11px !important;
+                }
+                .property-popup td {
+                    padding: 4px 0 !important;
+                }
+                .property-popup div {
+                    font-size: 11px !important;
+                }
+                .property-popup b {
+                    font-size: 12px !important;
+                }
             }
         </style>
     </head>
