@@ -295,6 +295,7 @@ def get_hurricane_data_tropycal():
                     'lon': None,
                     'past_track': [],
                     'forecast_track': [],
+                    'ai_forecast': None,
                     'wind_speed': None,
                     'movement_speed': None,
                     'movement_dir': None,
@@ -637,16 +638,16 @@ def create_hurricane_map():
                 TIV: {location.get('tiv', 'N/A')}
                 Hurricane Ded: {location.get('hurricane_deductible', 'N/A')}"""
                 
-                # Red icon for threatened properties - smaller on mobile
+                # Red icon for threatened properties - better mobile sizing
                 if is_mobile:
-                    # Small red circle for mobile threatened properties
+                    # Moderate-sized red circle for mobile threatened properties
                     folium.CircleMarker(
                         location=[location['lat'], location['lon']],
-                        radius=4,  # Very small for mobile
+                        radius=8,  # Larger radius that maintains visibility when zoomed
                         popup=folium.Popup(popup_content, max_width=250 if is_mobile else 350),
                         tooltip=tooltip_text,
                         color='white',
-                        weight=1,
+                        weight=2,
                         fill=True,
                         fillColor='#FF3B30',
                         fillOpacity=0.9
@@ -664,15 +665,15 @@ def create_hurricane_map():
                 # Normal tooltip
                 tooltip_text = f"<b>{location['location']}</b>"
                 
-                # Small circle for normal properties - even smaller on mobile
-                marker_radius = 3 if is_mobile else 6
+                # Moderate circle size that stays visible when zoomed
+                marker_radius = 7 if is_mobile else 6
                 folium.CircleMarker(
                     location=[location['lat'], location['lon']],
                     radius=marker_radius,
                     popup=folium.Popup(popup_content, max_width=250 if is_mobile else 350),
                     tooltip=tooltip_text,
                     color='white',
-                    weight=1 if is_mobile else 2,
+                    weight=2,
                     fill=True,
                     fillColor='#0E7490',
                     fillOpacity=0.9
@@ -746,16 +747,16 @@ def create_hurricane_map():
             </div>
             """
             
-            # Smaller hurricane icon for mobile
-            icon_size = "10px" if is_mobile else "16px"
-            font_size = "11px" if is_mobile else "13px"
+            # Hurricane icon sizing - moderate size for mobile
+            icon_size = "14px" if is_mobile else "16px"
+            font_size = "12px" if is_mobile else "13px"
             
             hurricane_icon = folium.features.DivIcon(
                 html=f"""
                 <div style="text-align: center;">
                     <div style="font-size: 12px; width: {icon_size}; height: {icon_size}; 
                          background-color: #FF3B30; border-radius: 50%; 
-                         border: 2px solid white; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.2);"></div>
+                         border: 3px solid white; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.2);"></div>
                     <div style="font-size: {font_size}; font-weight: 600; color: #000000; 
                          margin-top: 3px; text-shadow: 1px 1px 3px rgba(255,255,255,0.8), -1px -1px 3px rgba(255,255,255,0.8);
                          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
@@ -779,7 +780,7 @@ def create_hurricane_map():
                 fill=True,
                 fillColor='#FF3B30',
                 fillOpacity=0.08,  # Very subtle fill
-                weight=1 if is_mobile else 1.5,
+                weight=1.5,  # Consistent weight
                 opacity=0.3,
                 dash_array='8,4',
                 tooltip=f"{hurricane['name']} - 300 Mile Threat Zone"
@@ -794,14 +795,14 @@ def create_hurricane_map():
                     folium.PolyLine(
                         locations=past_coords,
                         color='#8E8E93',  # iOS gray for neutral past track
-                        weight=1.5 if is_mobile else 2.5,
+                        weight=2 if is_mobile else 2.5,  # Maintain visibility
                         opacity=0.7,
                         tooltip=f"{hurricane['name']} Complete Track ({len(past_coords)} points)"
                     ).add_to(past_track_group)
                     
                     # Add markers for ALL historical positions (every 4th point for visibility)
                     point_interval = 6 if is_mobile else 4  # Show fewer points on mobile
-                    marker_radius = 2 if is_mobile else 3
+                    marker_radius = 4 if is_mobile else 3  # Larger minimum size for visibility
                     
                     for i, point in enumerate(hurricane['past_track']):
                         # Show fewer points on mobile
@@ -851,7 +852,7 @@ def create_hurricane_map():
                     folium.PolyLine(
                         locations=cone_data['center_line'],
                         color='#8E8E93',  # iOS gray - neutral
-                        weight=1.5 if is_mobile else 2,
+                        weight=2,  # Consistent weight for visibility
                         opacity=0.6,
                         dash_array='10,5',
                         tooltip=f"AI Forecast - {cone_data['source']}"
@@ -861,7 +862,7 @@ def create_hurricane_map():
                     folium.Polygon(
                         locations=cone_data['polygon'],
                         color=cone_color,
-                        weight=1 if is_mobile else 1.5,
+                        weight=1.5,  # Consistent weight
                         fill=True,
                         fillColor=cone_color,
                         fillOpacity=0.15,  # More subtle
@@ -876,7 +877,7 @@ def create_hurricane_map():
                             error_miles = point['cone_radius_nm'] * 1.15078
                             folium.CircleMarker(
                                 location=[point['lat'], point['lon']],
-                                radius=3 if is_mobile else 4,
+                                radius=5 if is_mobile else 4,  # Larger for better zoom visibility
                                 popup=f"""<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
                                          <b style="color: #000000; font-size: 14px;">AI Forecast +{point['hours']}h</b><br>
                                          <span style="color: #8E8E93;">Position:</span> {point['lat']:.1f}°N, {abs(point['lon']):.1f}°W<br>
@@ -888,7 +889,7 @@ def create_hurricane_map():
                                 fill=True,
                                 fillColor='#FFFFFF',  # White fill
                                 fillOpacity=0.9,
-                                weight=1 if is_mobile else 1.5
+                                weight=1.5  # Consistent weight
                             ).add_to(ai_forecast_group)
     
     # Add all groups to map
@@ -1179,21 +1180,17 @@ def index():
                 width: 100vw;
             }
             
-            /* Mobile-specific marker sizing */
+            /* Mobile-specific marker sizing WITHOUT zoom scaling */
             @media screen and (max-width: 768px) {
-                /* Make all circle markers smaller on mobile */
-                .leaflet-marker-pane svg {
-                    transform: scale(0.7);
-                }
-                
-                /* Make marker icons smaller */
-                .leaflet-marker-icon {
-                    transform: scale(0.8);
-                }
-                
-                /* Smaller click/touch targets for dense areas */
+                /* Don't scale markers - let them maintain size for visibility */
                 .leaflet-clickable {
                     cursor: pointer;
+                }
+                
+                /* Ensure minimum touch target size */
+                .leaflet-marker-icon {
+                    min-width: 24px !important;
+                    min-height: 24px !important;
                 }
             }
             
