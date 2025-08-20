@@ -10,7 +10,7 @@ import numpy as np
 import math
 import threading
 import time
-import openai  # pip install openai
+from openai import OpenAI  # pip install openai
 import re
 import pickle
 from dotenv import load_dotenv  # pip install python-dotenv
@@ -25,8 +25,8 @@ locations_data = []
 ai_predictions_cache = {}
 last_ai_update = None
 
-# Configure OpenAI from environment variable (secure)
-openai.api_key = os.getenv('OPENAI_API_KEY')
+# Configure OpenAI client from environment variable (secure)
+openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY')) if os.getenv('OPENAI_API_KEY') else None
 
 # Cost tracking
 cost_tracker = {
@@ -51,11 +51,26 @@ def get_ai_hurricane_prediction(hurricane_info):
             return ai_predictions_cache[storm_id]['prediction']
     
     # If no API key, use free climatological model
-    if not openai.api_key:
+    if not openai_client:
         print("  No OpenAI API key found, using free climatological model")
         return get_free_climatological_prediction(hurricane_info)
     
     try:
+        # Get the last observation time from the storm's track data
+        last_obs_time = None
+        if hurricane_info.get('past_track') and len(hurricane_info['past_track']) > 0:
+            last_point = hurricane_info['past_track'][-1]
+            if last_point.get('time'):
+                try:
+                    # Parse the time string "2024-08-20 12:00 UTC"
+                    last_obs_time = datetime.strptime(last_point['time'], '%Y-%m-%d %H:%M UTC')
+                except:
+                    last_obs_time = datetime.now()
+            else:
+                last_obs_time = datetime.now()
+        else:
+            last_obs_time = datetime.now()
+        
         # Prepare concise prompt to minimize tokens (saves money)
         lat = hurricane_info['lat']
         lon = hurricane_info['lon']
@@ -64,7 +79,8 @@ def get_ai_hurricane_prediction(hurricane_info):
         speed = hurricane_info.get('movement_speed', 15)
         
         prompt = f"""Storm {hurricane_info['name']} at {lat}N,{lon}W, {wind}mph winds, moving {movement} at {speed}mph.
-Provide 5-day forecast. Format each line exactly as: Hours,Lat,Lon,Wind,ErrorRadius
+Last observation: {last_obs_time.strftime('%Y-%m-%d %H:%M UTC')}
+Provide 5-day forecast from this position. Format each line exactly as: Hours,Lat,Lon,Wind,ErrorRadius
 Example: 12,25.5,-80.3,95,35
 12h:
 24h:
@@ -78,7 +94,7 @@ Example: 12,25.5,-80.3,95,35
 120h:"""
 
         # Use GPT-3.5-turbo for cost efficiency
-        response = openai.ChatCompletion.create(
+        response = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",  # Only $0.001 per request
             messages=[
                 {"role": "system", "content": "You are a meteorologist. Give only numbers, no explanation."},
@@ -94,9 +110,9 @@ Example: 12,25.5,-80.3,95,35
         cost_tracker['requests_today'] += 1
         print(f"  AI prediction cost: ${cost:.4f} (Total today: ${cost_tracker['total_cost']:.2f})")
         
-        # Parse response
+        # Parse response with correct timing
         ai_text = response.choices[0].message.content
-        prediction = parse_ai_forecast(ai_text, hurricane_info)
+        prediction = parse_ai_forecast(ai_text, hurricane_info, last_obs_time)
         
         # Cache the prediction
         ai_predictions_cache[storm_id] = {
@@ -110,9 +126,13 @@ Example: 12,25.5,-80.3,95,35
         print(f"  AI prediction failed: {e}, using free backup")
         return get_free_climatological_prediction(hurricane_info)
 
-def parse_ai_forecast(ai_text, hurricane_info):
-    """Parse AI response into forecast points"""
+def parse_ai_forecast(ai_text, hurricane_info, base_time=None):
+    """Parse AI response into forecast points with correct timing"""
     forecast_points = []
+    
+    # Use base_time if provided, otherwise use current time
+    if base_time is None:
+        base_time = datetime.now()
     
     try:
         lines = ai_text.strip().split('\n')
@@ -126,20 +146,23 @@ def parse_ai_forecast(ai_text, hurricane_info):
                 wind = float(numbers[3])
                 error = float(numbers[4]) if len(numbers) > 4 else (20 + hours * 1.2)
                 
+                # Calculate forecast time from the base observation time
+                forecast_time = base_time + timedelta(hours=hours)
+                
                 forecast_points.append({
                     'hours': hours,
                     'lat': lat,
                     'lon': lon,
                     'wind_speed': wind,
                     'cone_radius_nm': error,
-                    'time': (datetime.now() + timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M')
+                    'time': forecast_time.strftime('%Y-%m-%d %H:%M')
                 })
     except:
         pass
     
     # If parsing fails, return climatological forecast
     if not forecast_points:
-        return get_free_climatological_prediction(hurricane_info)
+        return get_free_climatological_prediction(hurricane_info, base_time)
     
     return {
         'forecast_points': forecast_points,
@@ -147,7 +170,7 @@ def parse_ai_forecast(ai_text, hurricane_info):
         'source': 'AI-Enhanced (GPT-3.5)'
     }
 
-def get_free_climatological_prediction(hurricane_info):
+def get_free_climatological_prediction(hurricane_info, base_time=None):
     """
     FREE fallback prediction using Atlantic hurricane climatology
     No API costs!
@@ -155,6 +178,10 @@ def get_free_climatological_prediction(hurricane_info):
     lat = hurricane_info['lat']
     lon = hurricane_info['lon']
     wind = hurricane_info.get('wind_speed', 75)
+    
+    # Use base_time if provided, otherwise use current time
+    if base_time is None:
+        base_time = datetime.now()
     
     forecast_points = []
     
@@ -187,13 +214,16 @@ def get_free_climatological_prediction(hurricane_info):
             72: 110, 84: 125, 96: 140, 108: 155, 120: 170
         }.get(hours, 170)
         
+        # Calculate forecast time from the base observation time
+        forecast_time = base_time + timedelta(hours=hours)
+        
         forecast_points.append({
             'hours': hours,
             'lat': round(new_lat, 1),
             'lon': round(new_lon, 1),
             'wind_speed': new_wind,
             'cone_radius_nm': error_cone,
-            'time': (datetime.now() + timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M')
+            'time': forecast_time.strftime('%Y-%m-%d %H:%M')
         })
     
     return {
@@ -605,8 +635,6 @@ def create_hurricane_map():
                         <td style='padding: 8px 0; color: #3C3C43;'>{location['category']}</td>
                     </tr>
                 """
-            
-
             
             # Show claims contact if available
             if location.get('claims_contact') and location['claims_contact'] != 'N/A':
@@ -1381,7 +1409,7 @@ def api_status():
         'cost_today': cost_tracker['total_cost'],
         'requests_today': cost_tracker['requests_today'],
         'cached_storms': len(ai_predictions_cache),
-        'api_mode': 'OpenAI' if openai.api_key else 'Free Climatological'
+        'api_mode': 'OpenAI' if openai_client else 'Free Climatological'
     })
 
 # Initialize app
@@ -1400,7 +1428,7 @@ except:
     print("No cache found, starting fresh")
 
 # Check API configuration
-if openai.api_key:
+if openai_client:
     print("✓ OpenAI API configured - Using GPT-3.5-turbo ($0.001/request)")
     print("  Estimated cost: $2-5/year for typical usage")
 else:
